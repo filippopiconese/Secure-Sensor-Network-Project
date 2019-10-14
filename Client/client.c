@@ -74,14 +74,8 @@ static void
 adjust_transmission_power(char *rssi)
 {
   uint16_t rssi_int = atoi(rssi);
-<<<<<<< HEAD
   PRINTF("The RSSI received from cluster node is %d dBm. TPower is %d\n", rssi_int, transmission_power);
   if(rssi_int >= -70 && lock_transmission_power != 1 && transmission_power > 0) {
-=======
-  PRINTF("The RSSI received from cluster node is %d dBm\n", rssi_int);
-  if (rssi_int >= -70 && lock_transmission_power != 1 && transmission_power > 0)
-  {
->>>>>>> 0068807fc1070e265702416a538590676e444622
     transmission_power--;
     PRINTF("Lowering TPower to %d\n", transmission_power);
   }
@@ -92,17 +86,10 @@ adjust_transmission_power(char *rssi)
     {
       transmission_power++;
       PRINTF("Increasing TPower to %d\n", transmission_power);
-<<<<<<< HEAD
     } else {
       PRINTF("Nothing to improve. Transmission power is already at max value!\n");
     }
   } else if(lock_transmission_power){
-=======
-    }
-  }
-  else
-  {
->>>>>>> 0068807fc1070e265702416a538590676e444622
     PRINTF("Optimal TPower reached\n");
   } 
   cc2420_set_txpower(transmission_power);
