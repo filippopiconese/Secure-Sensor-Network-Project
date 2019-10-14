@@ -3440,9 +3440,9 @@ LOAD /usr/local/bin/../lib/gcc/msp430/4.7.2/mcpu-430x/mmpy-16/msr20/mc20/libcrt0
  .stab          0x0002ac60      0x42c build/z1/contiki-ng-z1.a(button-sensor.o)
                                 0x780 (size before relaxing)
 
-.stabstr        0x00000000    0x1bd99
+.stabstr        0x00000000    0x1bda1
  *(.stabstr)
- .stabstr       0x00000000    0x1bd99 client.o
+ .stabstr       0x00000000    0x1bda1 client.o
 
 .stab.excl
  *(.stab.excl)

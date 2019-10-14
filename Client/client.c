@@ -139,7 +139,7 @@ print_local_addresses(void)
 static void
 set_global_address(void)
 {
-  uip_ip6addr(&server_ipaddr, 0xfe80, 0, 0, 0, 0xc30c, 0, 0, 0x0009); //fe80::c30c:0:0:5
+  uip_ip6addr(&server_ipaddr, 0xfe80, 0, 0, 0, 0xc30c, 0, 0, 0x0009); //fe80::c30c:0:0:9
 }
 /*---------------------------------------------------------------------------*/
 
