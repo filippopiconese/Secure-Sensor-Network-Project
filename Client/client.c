@@ -68,8 +68,27 @@ static uip_ipaddr_t server_ipaddr;
 PROCESS(udp_client_process, "UDP client process");
 AUTOSTART_PROCESSES(&udp_client_process);
 /*---------------------------------------------------------------------------*/
-static int seq_id;
-static int reply;
+static uint8_t transmission_power = 31;
+static bool lock_transmission_power = 0; // 1 if optimal tPower is reached, 0 otherwise
+
+static void
+adjust_transmission_power(char* rssi) {
+  uint16_t rssi_int = atoi(rssi);
+  PRINTF("The RSSI received from cluster node is %d dBm\n", rssi_int);
+  if(rssi_int >= -70 && lock_transmission_power != 1 && transmission_power > 0) {
+    transmission_power--;
+    PRINTF("Lowering TPower to %d\n", transmission_power);
+  } else if(rssi_int < -70){
+    lock_transmission_power = 1;
+    if(transmission_power < 31) {
+      transmission_power++;
+      PRINTF("Increasing TPower to %d\n", transmission_power);
+    }   
+  } else {
+    PRINTF("Optimal TPower reached\n");
+  }
+  cc2420_set_txpower(transmission_power);
+}
 
 static void
 tcpip_handler(void)
@@ -79,20 +98,14 @@ tcpip_handler(void)
     if(uip_newdata()) {
         str = uip_appdata;
         str[uip_datalen()] = '\0';
-        reply++;
-        PRINTF("DATA recv '%s' (s:%d, r:%d)\n", str, seq_id, reply);
+        adjust_transmission_power(str);
     }
 }
 /*---------------------------------------------------------------------------*/
 static void
 send_packet(void *ptr)
 {
-    // int tran_power = (rand() % 31) + 1;
-    // cc2420_set_txpower(tran_power);
-    
     char buf[MAX_PAYLOAD_LEN];
-
-    seq_id++;
 
     sprintf(buf, "Hello world");
     PRINTF("Sending data '%s' to ", buf);
