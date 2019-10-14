@@ -45,18 +45,18 @@
 #include "net/ipv6/uip-debug.h"
 
 #ifndef UIP_IP_BUF
-#define UIP_IP_BUF   ((struct uip_ip_hdr *)&uip_buf[UIP_LLH_LEN])
+#define UIP_IP_BUF ((struct uip_ip_hdr *)&uip_buf[UIP_LLH_LEN])
 #endif
 
-#define UDP_CLIENT_PORT	8765
-#define UDP_SERVER_PORT	6666
+#define UDP_CLIENT_PORT 8765
+#define UDP_SERVER_PORT 6666
 #define UDP_SERVER1_PORT 8888
-#define UDP_BORDER_PORT	7777
+#define UDP_BORDER_PORT 7777
 
 #define SERVER_REPLY 1
 #define MAX_PAYLOAD_LEN 100
 
-#define UDP_EXAMPLE_ID  190
+#define UDP_EXAMPLE_ID 190
 
 static struct uip_udp_conn *server_conn;
 static struct uip_udp_conn *border_conn;
@@ -68,30 +68,33 @@ AUTOSTART_PROCESSES(&udp_server_process);
 
 /*---------------------------------------------------------------------------*/
 static void
-send_packet(void *ptr, char* buf, uip_ipaddr_t dest_ipaddr, struct uip_udp_conn *dest_conn, int rem_port)
+send_packet(void *ptr, char *buf, uip_ipaddr_t dest_ipaddr, struct uip_udp_conn *dest_conn, int rem_port)
 {
-    PRINTF("Sending data '%s'  ", buf);
-    PRINT6ADDR(&dest_ipaddr);
-    PRINTF("\n");
-    uip_udp_packet_sendto(dest_conn, buf, strlen(buf), &dest_ipaddr, UIP_HTONS(rem_port));
+  PRINTF("Sending data '%s'  ", buf);
+  PRINT6ADDR(&dest_ipaddr);
+  PRINTF("\n");
+  uip_udp_packet_sendto(dest_conn, buf, strlen(buf), &dest_ipaddr, UIP_HTONS(rem_port));
 }
 /*---------------------------------------------------------------------------*/
 static signed char
-calculate_RSSI(uip_ipaddr_t originator_ipaddr) {
+calculate_RSSI(uip_ipaddr_t originator_ipaddr)
+{
   static signed char rss;
   static signed char rss_val;
   static signed char rss_offset;
   rss_val = cc2420_last_rssi;
-  rss_offset=0;
-  rss=rss_val + rss_offset;
-  PRINTF("RSSI of Last Packet Received is %d dBm from ",rss);
+  rss_offset = 0;
+  rss = rss_val + rss_offset;
+  PRINTF("RSSI of Last Packet Received is %d dBm from ", rss);
   PRINT6ADDR(&originator_ipaddr);
 
   // Calculate LQI
-  radio_value_t* lqi = malloc(sizeof(radio_value_t));
+  radio_value_t *lqi = malloc(sizeof(radio_value_t));
   cc2420_driver.get_value(RADIO_PARAM_LAST_LINK_QUALITY, lqi);
 
   PRINTF("\nLQI = %d\n", *lqi);
+
+  free(lqi);
 
   return rss;
 }
@@ -103,24 +106,28 @@ tcpip_handler(void)
 {
   char *appdata;
 
-  if(uip_newdata()) {
+  if (uip_newdata())
+  {
     appdata = (char *)uip_appdata;
     appdata[uip_datalen()] = 0;
     uip_ipaddr_t client_ipaddr = UIP_IP_BUF->srcipaddr;
     PRINTF("DATA recv '%s' from ", appdata);
-    PRINT6ADDR(&client_ipaddr);       
+    PRINT6ADDR(&client_ipaddr);
     PRINTF("\n");
-    
+
     signed char rss = calculate_RSSI(UIP_IP_BUF->srcipaddr);
     // Try to redirect data to the border router
     send_packet(NULL, appdata, border_ipaddr, border_conn, UDP_BORDER_PORT);
     /* --------------------------------------------------- */
     // Send RSSI to client
-    char * rssi = malloc(4*sizeof(char));
+    char *rssi = malloc(4 * sizeof(char));
     snprintf(rssi, 4, "%d", rss);
     send_packet(NULL, rssi, client_ipaddr, server_conn, UDP_CLIENT_PORT);
-  } else {
-		PRINTF("No DATA\n");
+    free(rssi);
+  }
+  else
+  {
+    PRINTF("No DATA\n");
   }
 }
 /*---------------------------------------------------------------------------*/
@@ -131,14 +138,17 @@ print_local_addresses(void)
   uint8_t state;
 
   PRINTF("Server IPv6 addresses: ");
-  for(i = 0; i < UIP_DS6_ADDR_NB; i++) {
+  for (i = 0; i < UIP_DS6_ADDR_NB; i++)
+  {
     state = uip_ds6_if.addr_list[i].state;
-    if(state == ADDR_TENTATIVE || state == ADDR_PREFERRED) {
+    if (state == ADDR_TENTATIVE || state == ADDR_PREFERRED)
+    {
       PRINT6ADDR(&uip_ds6_if.addr_list[i].ipaddr);
       PRINTF("\n");
       /* hack to make address "final" */
-      if (state == ADDR_TENTATIVE) {
-	uip_ds6_if.addr_list[i].state = ADDR_PREFERRED;
+      if (state == ADDR_TENTATIVE)
+      {
+        uip_ds6_if.addr_list[i].state = ADDR_PREFERRED;
       }
     }
   }
@@ -160,21 +170,23 @@ PROCESS_THREAD(udp_server_process, ev, data)
 
   PRINTF("Cluster head started. nbr:%d routes:%d\n",
          NBR_TABLE_CONF_MAX_NEIGHBORS, UIP_CONF_MAX_ROUTES);
-    
+
   set_global_address();
-  
+
   print_local_addresses();
 
   // Connection to the client
   server_conn = udp_new(NULL, UIP_HTONS(UDP_CLIENT_PORT), NULL);
   // Connection to the border router
   border_conn = udp_new(NULL, UIP_HTONS(UDP_BORDER_PORT), NULL);
-  if(server_conn == NULL) {
+  if (server_conn == NULL)
+  {
     PRINTF("No UDP connection available with the client, exiting the process!\n");
     PROCESS_EXIT();
   }
 
-  if(border_conn == NULL) {
+  if (border_conn == NULL)
+  {
     PRINTF("No UDP connection available with the border router, exiting the process!\n");
     PROCESS_EXIT();
   }
@@ -192,11 +204,13 @@ PROCESS_THREAD(udp_server_process, ev, data)
   PRINTF(" local/remote port %u/%u\n", UIP_HTONS(border_conn->lport),
          UIP_HTONS(border_conn->rport));
 
-  while(1) {
+  while (1)
+  {
     PROCESS_YIELD();
-    if(ev == tcpip_event) {
+    if (ev == tcpip_event)
+    {
       tcpip_handler();
-    } 
+    }
   }
 
   PROCESS_END();
