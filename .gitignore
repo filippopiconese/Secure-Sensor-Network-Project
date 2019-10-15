@@ -1,3 +1,6 @@
 *.z1
 *.sky
-build/*
+build/
+*/build
+*/*.z1
+*/*.sky
