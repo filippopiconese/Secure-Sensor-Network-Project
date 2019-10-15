@@ -104,7 +104,7 @@ multicast_send(void)
   PRINTF("Send to: ");
   PRINT6ADDR(&mcast_conn->ripaddr);
   PRINTF(" Remote Port %u,", uip_ntohs(mcast_conn->rport));
-  PRINTF(" (msg=%s)", buf);
+  PRINTF(" Multicast message (msg=%s)", buf);
 
   uip_udp_packet_send(mcast_conn, buf, sizeof(message));
 }
