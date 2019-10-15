@@ -97,16 +97,13 @@ prepare_mcast(void)
 static void
 multicast_send(void)
 {
-  memset(buf, 0, MAX_PAYLOAD_LEN);
-  char *message = "CH";
-  memcpy(buf, &message, sizeof(message));
-
-  PRINTF("Send to: ");
+  char buf[MAX_PAYLOAD_LEN];
+  sprintf(buf, "CH");
+  PRINTF("Sending multicast data '%s' to ", buf);
   PRINT6ADDR(&mcast_conn->ripaddr);
-  PRINTF(" Remote Port %u,", uip_ntohs(mcast_conn->rport));
-  PRINTF(" Multicast message (msg=%s)", buf);
+  PRINTF("\n");
 
-  uip_udp_packet_send(mcast_conn, buf, sizeof(message));
+  uip_udp_packet_send(mcast_conn, buf, strlen(buf));
 }
 
 /*---------------------------------------------------------------------------*/
