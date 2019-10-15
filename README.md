@@ -14,3 +14,4 @@ the RSSI value was above a certain threshold (at least > -70dBm). https://www.me
 - [ ] Change randomly the CHs selection.
 - [ ] Try to add AWGN distorsions to the communication link.
 - [ ] Modify the TX power based on LEAH algorithm.
+- [ ] Implement an aggregation algorithm at cluster head
