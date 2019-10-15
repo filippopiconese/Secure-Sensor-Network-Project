@@ -52,19 +52,62 @@
 #define UDP_SERVER_PORT 6666
 #define UDP_SERVER1_PORT 8888
 #define UDP_BORDER_PORT 7777
+#define MCAST_SINK_UDP_PORT 3001 /* Host byte order */
 
 #define SERVER_REPLY 1
-#define MAX_PAYLOAD_LEN 100
+#define MAX_PAYLOAD_LEN 3
 
 #define UDP_EXAMPLE_ID 190
+#define CH_MULTICAST_INTERVAL 180
 
 static struct uip_udp_conn *server_conn;
 static struct uip_udp_conn *border_conn;
 
 static uip_ipaddr_t border_ipaddr;
 
+static struct uip_udp_conn *mcast_conn;
+static char buf[MAX_PAYLOAD_LEN];
+
 PROCESS(udp_server_process, "UDP server process");
 AUTOSTART_PROCESSES(&udp_server_process);
+
+/*---------------------------------------------------------------------------*/
+static void
+prepare_mcast(void)
+{
+  uip_ipaddr_t ipaddr;
+
+#if UIP_MCAST6_CONF_ENGINE == UIP_MCAST6_ENGINE_MPL
+  /*
+ * MPL defines a well-known MPL domain, MPL_ALL_FORWARDERS, which
+ *  MPL nodes are automatically members of. Send to that domain.
+ */
+  uip_ip6addr(&ipaddr, 0xFF03, 0, 0, 0, 0, 0, 0, 0xFC);
+#else
+  /*
+   * IPHC will use stateless multicast compression for this destination
+   * (M=1, DAC=0), with 32 inline bits (1E 89 AB CD)
+   */
+  uip_ip6addr(&ipaddr, 0xFF1E, 0, 0, 0, 0, 0, 0x89, 0xABCD);
+#endif
+  mcast_conn = udp_new(&ipaddr, UIP_HTONS(MCAST_SINK_UDP_PORT), NULL);
+}
+
+/*---------------------------------------------------------------------------*/
+static void
+multicast_send(void)
+{
+  memset(buf, 0, MAX_PAYLOAD_LEN);
+  char *message = "CH";
+  memcpy(buf, &message, sizeof(message));
+
+  PRINTF("Send to: ");
+  PRINT6ADDR(&mcast_conn->ripaddr);
+  PRINTF(" Remote Port %u,", uip_ntohs(mcast_conn->rport));
+  PRINTF(" (msg=%s)", buf);
+
+  uip_udp_packet_send(mcast_conn, buf, sizeof(message));
+}
 
 /*---------------------------------------------------------------------------*/
 static void
@@ -75,6 +118,7 @@ send_packet(void *ptr, char *buf, uip_ipaddr_t dest_ipaddr, struct uip_udp_conn 
   PRINTF("\n");
   uip_udp_packet_sendto(dest_conn, buf, strlen(buf), &dest_ipaddr, UIP_HTONS(rem_port));
 }
+
 /*---------------------------------------------------------------------------*/
 static signed char
 calculate_RSSI(uip_ipaddr_t originator_ipaddr)
@@ -100,7 +144,6 @@ calculate_RSSI(uip_ipaddr_t originator_ipaddr)
 }
 
 /*---------------------------------------------------------------------------*/
-
 static void
 tcpip_handler(void)
 {
@@ -115,7 +158,7 @@ tcpip_handler(void)
     PRINT6ADDR(&client_ipaddr);
     PRINTF("\n");
 
-    signed char rss = calculate_RSSI(UIP_IP_BUF->srcipaddr);
+    signed char rss = calculate_RSSI(client_ipaddr);
     // Try to redirect data to the border router
     send_packet(NULL, appdata, border_ipaddr, border_conn, UDP_BORDER_PORT);
     /* --------------------------------------------------- */
@@ -130,6 +173,7 @@ tcpip_handler(void)
     PRINTF("No DATA\n");
   }
 }
+
 /*---------------------------------------------------------------------------*/
 static void
 print_local_addresses(void)
@@ -164,6 +208,8 @@ set_global_address(void)
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(udp_server_process, ev, data)
 {
+  static struct etimer et;
+
   PROCESS_BEGIN();
 
   PROCESS_PAUSE();
@@ -204,12 +250,20 @@ PROCESS_THREAD(udp_server_process, ev, data)
   PRINTF(" local/remote port %u/%u\n", UIP_HTONS(border_conn->lport),
          UIP_HTONS(border_conn->rport));
 
+  prepare_mcast();
+  etimer_set(&et, CLOCK_SECOND);
+
   while (1)
   {
     PROCESS_YIELD();
     if (ev == tcpip_event)
     {
       tcpip_handler();
+    }
+    if (etimer_expired(&et))
+    {
+      multicast_send();
+      etimer_set(&et, CH_MULTICAST_INTERVAL * CLOCK_SECOND);
     }
   }
 

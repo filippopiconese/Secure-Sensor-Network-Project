@@ -51,6 +51,8 @@
 #define DEBUG DEBUG_FULL
 #include "net/ipv6/uip-debug.h"
 
+#define MCAST_SINK_UDP_PORT 3001 /* Host byte order */
+
 #ifndef PERIOD
 #define PERIOD 10
 #endif
@@ -61,7 +63,8 @@
 #define MAX_PAYLOAD_LEN 100
 
 static struct uip_udp_conn *client_conn;
-static uip_ipaddr_t server_ipaddr;
+static struct uip_udp_conn *sink_conn;
+static uip_ipaddr_t ch_ipaddr;
 
 /*---------------------------------------------------------------------------*/
 PROCESS(udp_client_process, "UDP client process");
@@ -70,12 +73,43 @@ AUTOSTART_PROCESSES(&udp_client_process);
 static uint8_t transmission_power = 31;
 static bool lock_transmission_power = 0; // 1 if optimal tPower is reached, 0 otherwise
 
+/*---------------------------------------------------------------------------*/
+static uip_ds6_maddr_t *
+join_mcast_group(void)
+{
+  uip_ipaddr_t addr;
+  uip_ds6_maddr_t *rv;
+  const uip_ipaddr_t *default_prefix = uip_ds6_default_prefix();
+
+  /* First, set our v6 global */
+  uip_ip6addr_copy(&addr, default_prefix);
+  uip_ds6_set_addr_iid(&addr, &uip_lladdr);
+  uip_ds6_addr_add(&addr, 0, ADDR_AUTOCONF);
+
+  /*
+   * IPHC will use stateless multicast compression for this destination
+   * (M=1, DAC=0), with 32 inline bits (1E 89 AB CD)
+   */
+  uip_ip6addr(&addr, 0xFF1E, 0, 0, 0, 0, 0, 0x89, 0xABCD);
+  rv = uip_ds6_maddr_add(&addr);
+
+  if (rv)
+  {
+    PRINTF("Joined multicast group ");
+    PRINT6ADDR(&uip_ds6_maddr_lookup(&addr)->ipaddr);
+    PRINTF("\n");
+  }
+  return rv;
+}
+
+/*---------------------------------------------------------------------------*/
 static void
 adjust_transmission_power(char *rssi)
 {
   uint16_t rssi_int = atoi(rssi);
   PRINTF("The RSSI received from cluster node is %d dBm. TPower is %d\n", rssi_int, transmission_power);
-  if(rssi_int >= -70 && lock_transmission_power != 1 && transmission_power > 0) {
+  if (rssi_int >= -70 && lock_transmission_power != 1 && transmission_power > 0)
+  {
     transmission_power--;
     PRINTF("Lowering TPower to %d\n", transmission_power);
   }
@@ -86,15 +120,20 @@ adjust_transmission_power(char *rssi)
     {
       transmission_power++;
       PRINTF("Increasing TPower to %d\n", transmission_power);
-    } else {
+    }
+    else
+    {
       PRINTF("Nothing to improve. Transmission power is already at max value!\n");
     }
-  } else if(lock_transmission_power){
+  }
+  else if (lock_transmission_power)
+  {
     PRINTF("Optimal TPower reached\n");
-  } 
+  }
   cc2420_set_txpower(transmission_power);
 }
 
+/*---------------------------------------------------------------------------*/
 static void
 tcpip_handler(void)
 {
@@ -103,10 +142,22 @@ tcpip_handler(void)
   if (uip_newdata())
   {
     str = uip_appdata;
-    str[uip_datalen()] = '\0';
-    adjust_transmission_power(str);
+
+    if (strlen(str) == 2)
+    {
+      ch_ipaddr = UIP_IP_BUF->srcipaddr;
+      PRINTF("\nRicevuto ch ipaddr:\n");
+      PRINT6ADDR(&ch_ipaddr);
+    }
+    else
+    {
+      str[uip_datalen()] = '\0';
+      adjust_transmission_power(str);
+      PRINTF("\nAggiustata tx power:\n");
+    }
   }
 }
+
 /*---------------------------------------------------------------------------*/
 static void
 send_packet(void *ptr)
@@ -115,10 +166,11 @@ send_packet(void *ptr)
 
   sprintf(buf, "Hello world");
   PRINTF("Sending data '%s' to ", buf);
-  PRINT6ADDR(&server_ipaddr);
+  PRINT6ADDR(&ch_ipaddr);
   PRINTF("\n");
-  uip_udp_packet_sendto(client_conn, buf, strlen(buf), &server_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
+  uip_udp_packet_sendto(client_conn, buf, strlen(buf), &ch_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
 }
+
 /*---------------------------------------------------------------------------*/
 static void
 print_local_addresses(void)
@@ -143,15 +195,8 @@ print_local_addresses(void)
     }
   }
 }
-/*---------------------------------------------------------------------------*/
-//Set address of the cluster head
-static void
-set_global_address(void)
-{
-  uip_ip6addr(&server_ipaddr, 0xfe80, 0, 0, 0, 0xc30c, 0, 0, 0x0009); //fe80::c30c:0:0:9
-}
-/*---------------------------------------------------------------------------*/
 
+/*---------------------------------------------------------------------------*/
 PROCESS_THREAD(udp_client_process, ev, data)
 {
   static struct etimer periodic;
@@ -161,18 +206,28 @@ PROCESS_THREAD(udp_client_process, ev, data)
 
   PROCESS_PAUSE();
 
-  set_global_address();
-
   print_local_addresses();
 
-  /* new connection with remote host */
-  client_conn = udp_new(&server_ipaddr, UIP_HTONS(UDP_SERVER_PORT), NULL);
-  if (client_conn == NULL)
+  // /* new connection with remote host */
+  // client_conn = udp_new(&ch_ipaddr, UIP_HTONS(UDP_SERVER_PORT), NULL);
+  // if (client_conn == NULL)
+  // {
+  //   PRINTF("No UDP connection available, exiting the process!\n");
+  //   PROCESS_EXIT();
+  // }
+  // udp_bind(client_conn, UIP_HTONS(UDP_CLIENT_PORT));
+
+  client_conn = udp_new(NULL, UIP_HTONS(UDP_SERVER_PORT), NULL);
+  udp_bind(client_conn, UIP_HTONS(UDP_CLIENT_PORT));
+
+  if (join_mcast_group() == NULL)
   {
-    PRINTF("No UDP connection available, exiting the process!\n");
+    PRINTF("Failed to join multicast group\n");
     PROCESS_EXIT();
   }
-  udp_bind(client_conn, UIP_HTONS(UDP_CLIENT_PORT));
+
+  sink_conn = udp_new(NULL, UIP_HTONS(0), NULL);
+  udp_bind(sink_conn, UIP_HTONS(MCAST_SINK_UDP_PORT));
 
   PRINTF("Created a connection with the server ");
   PRINT6ADDR(&client_conn->ripaddr);
