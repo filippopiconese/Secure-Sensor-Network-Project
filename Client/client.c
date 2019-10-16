@@ -163,13 +163,16 @@ tcpip_handler(void)
     if (strlen(str) < 3)
     {
       signed char rssi_tmp = calculate_RSSI(UIP_IP_BUF->srcipaddr);
-      if(rssi_tmp > best_rssi) {
+      if (rssi_tmp > best_rssi)
+      {
         best_rssi = rssi_tmp;
         ch_ipaddr = UIP_IP_BUF->srcipaddr;
         PRINTF("New CH is ");
         PRINT6ADDR(&ch_ipaddr);
         PRINTF("\n");
-      } else {
+      }
+      else
+      {
         PRINTF("Best CH already set\n");
       }
     }
