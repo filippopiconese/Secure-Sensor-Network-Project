@@ -59,7 +59,7 @@
 
 #define START_INTERVAL (15 * CLOCK_SECOND)
 #define SEND_INTERVAL (PERIOD * CLOCK_SECOND)
-#define SEND_TIME (2 * CLOCK_SECOND)
+#define SEND_TIME (40 * CLOCK_SECOND)
 #define MAX_PAYLOAD_LEN 100
 
 static struct uip_udp_conn *client_conn;
@@ -71,7 +71,24 @@ PROCESS(udp_client_process, "UDP client process");
 AUTOSTART_PROCESSES(&udp_client_process);
 /*---------------------------------------------------------------------------*/
 static uint8_t transmission_power = 31;
-static bool lock_transmission_power = 0; // 1 if optimal tPower is reached, 0 otherwise
+static int16_t best_rssi = -200; // Set to a minimum so it will be changed from the first packet received by CH
+
+/*---------------------------------------------------------------------------*/
+static signed char
+calculate_RSSI(uip_ipaddr_t originator_ipaddr)
+{
+  static signed char rss;
+  static signed char rss_val;
+  static signed char rss_offset;
+  rss_val = cc2420_last_rssi;
+  rss_offset = 0;
+  rss = rss_val + rss_offset;
+  PRINTF("RSSI of Last Packet Received is %d dBm from ", rss);
+  PRINT6ADDR(&originator_ipaddr);
+  PRINTF("\n");
+
+  return rss;
+}
 
 /*---------------------------------------------------------------------------*/
 static uip_ds6_maddr_t *
@@ -108,29 +125,29 @@ adjust_transmission_power(char *rssi)
 {
   uint16_t rssi_int = atoi(rssi);
   PRINTF("The RSSI received from cluster node is %d dBm. TPower is %d\n", rssi_int, transmission_power);
-  if (rssi_int >= -70 && lock_transmission_power != 1 && transmission_power > 0)
+  if (rssi_int >= -70 && transmission_power > 0)
   {
     transmission_power--;
     PRINTF("Lowering TPower to %d\n", transmission_power);
+    cc2420_set_txpower(transmission_power);
   }
   else if (rssi_int < -70)
   {
-    lock_transmission_power = 1;
     if (transmission_power < 31)
     {
       transmission_power++;
       PRINTF("Increasing TPower to %d\n", transmission_power);
+      cc2420_set_txpower(transmission_power);
     }
     else
     {
       PRINTF("Nothing to improve. Transmission power is already at max value!\n");
     }
   }
-  else if (lock_transmission_power)
+  else
   {
     PRINTF("Optimal TPower reached\n");
   }
-  cc2420_set_txpower(transmission_power);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -143,19 +160,26 @@ tcpip_handler(void)
   {
     str = uip_appdata;
 
-    if (strlen(str) == 2)
+    if (strlen(str) < 3)
     {
-      ch_ipaddr = UIP_IP_BUF->srcipaddr;
-      PRINTF("\nRicevuto ch ipaddr:\n");
-      PRINT6ADDR(&ch_ipaddr);
+      signed char rssi_tmp = calculate_RSSI(UIP_IP_BUF->srcipaddr);
+      if(rssi_tmp > best_rssi) {
+        best_rssi = rssi_tmp;
+        ch_ipaddr = UIP_IP_BUF->srcipaddr;
+        PRINTF("New CH is ");
+        PRINT6ADDR(&ch_ipaddr);
+        PRINTF("\n");
+      } else {
+        PRINTF("Best CH already set\n");
+      }
     }
     else
     {
       str[uip_datalen()] = '\0';
       adjust_transmission_power(str);
-      PRINTF("\nAggiustata tx power:\n");
     }
   }
+  str = NULL;
 }
 
 /*---------------------------------------------------------------------------*/

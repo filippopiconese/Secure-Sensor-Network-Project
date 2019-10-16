@@ -97,7 +97,7 @@ prepare_mcast(void)
 static void
 multicast_send(void)
 {
-  char buf[MAX_PAYLOAD_LEN];
+  // char buf[MAX_PAYLOAD_LEN];
   sprintf(buf, "CH");
   PRINTF("Sending multicast data '%s' to ", buf);
   PRINT6ADDR(&mcast_conn->ripaddr);
@@ -248,7 +248,7 @@ PROCESS_THREAD(udp_server_process, ev, data)
          UIP_HTONS(border_conn->rport));
 
   prepare_mcast();
-  etimer_set(&et, CLOCK_SECOND);
+  etimer_set(&et, 10 * CLOCK_SECOND);
 
   while (1)
   {
@@ -259,6 +259,7 @@ PROCESS_THREAD(udp_server_process, ev, data)
     }
     if (etimer_expired(&et))
     {
+      PRINTF("Sending multicast\n");
       multicast_send();
       etimer_set(&et, CH_MULTICAST_INTERVAL * CLOCK_SECOND);
     }

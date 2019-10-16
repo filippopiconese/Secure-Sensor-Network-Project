@@ -15,3 +15,7 @@ the RSSI value was above a certain threshold (at least > -70dBm). https://www.me
 - [ ] Try to add AWGN distorsions to the communication link.
 - [ ] Modify the TX power based on LEAH algorithm.
 - [ ] Implement an aggregation algorithm at cluster head
+- [ ] Fix optimal power function
+- [ ] Sometimes the router write on the output in a strange way
+- [ ] CH selection does not work at first iteration
+- [ ] Implement some data aggregation at CH
