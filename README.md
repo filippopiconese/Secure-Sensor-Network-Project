@@ -9,7 +9,7 @@
 the RSSI value was above a certain threshold (at least > -70dBm). https://www.metageek.com/training/resources/understanding-rssi.html
 
 ## Next steps
-- [ ] Add client CH selection based on the RSSI of the received broadcasted message sent by the CH. In this way, the client can add the nearest CH which is the one with the greater RSSI.
+- [X] Add client CH selection based on the RSSI of the received multicast message sent by the CH. In this way, the client can add the nearest CH which is the one with the greater RSSI.
 - [ ] Calculate the PRR.
 - [ ] Change randomly the CHs selection.
 - [ ] Try to add AWGN distorsions to the communication link.
