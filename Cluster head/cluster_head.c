@@ -51,7 +51,10 @@ static int ch_can_send = 1;
 static int first_iteration = 0;
 static int num_of_ch = 0;
 static int count = 0;
+static int tot = 0;
+static int first_value = 0;
 static uip_ipaddr_t ch_ipaddr;
+static uip_ipaddr_t first_addr;
 
 typedef struct ch_list
 {
@@ -59,7 +62,7 @@ typedef struct ch_list
   uip_ipaddr_t addr;
 } ch_list_t;
 
-static ch_list_t *ch_list;
+static ch_list_t *ch_list_struct;
 
 PROCESS(udp_server_process, "UDP server process");
 AUTOSTART_PROCESSES(&udp_server_process);
@@ -222,6 +225,7 @@ tcpip_handler(void)
   {
     appdata = (char *)uip_appdata;
     appdata[uip_datalen()] = '\0';
+
     if (strcmp(appdata, "A") == 0)
     {
       num_of_ch++;
@@ -229,25 +233,24 @@ tcpip_handler(void)
     }
     else if (digits_only(appdata))
     {
-      PRINTF("APPDATA: %s\n", appdata);
       int num = atoi(appdata);
-      PRINTF("NUM: %d\n", num);
-      ch_list = malloc(num_of_ch * sizeof(ch_list_t));
-      ch_list[count].val = num;
-      ch_list[count].addr = UIP_IP_BUF->srcipaddr;
+
+      ch_list_struct = malloc(num_of_ch * sizeof(ch_list_t));
+      if (count == 0)
+      {
+        first_value = num;
+        first_addr = UIP_IP_BUF->srcipaddr;
+      }
+      else
+      {
+        ch_list_struct[count] = (ch_list_t){.val = num, .addr = UIP_IP_BUF->srcipaddr};
+      }
+
+      tot += num;
 
       if (count == num_of_ch - 1)
       {
-        int tot = random_number;
-        PRINTF("TOT: %d\n", tot);
-        int i;
-        for (i = 0; i <= count; i++)
-        {
-          PRINTF("CH_LIST[I]: %d\n", ch_list[i].val);
-          tot += ch_list[i].val;
-
-          PRINTF("TOT 2 LA VENDETTA: %d\n", tot);
-        }
+        tot += random_number;
 
         int mean = tot / (num_of_ch + 1);
 
@@ -257,11 +260,19 @@ tcpip_handler(void)
         {
           PRINTF("I am NOT the cluster head\n");
           ch_can_send = 0;
+          int i;
           for (i = 0; i <= count; i++)
           {
-            if (ch_list[i].val >= mean)
+            if (i == 0)
             {
-              ch_ipaddr = UIP_IP_BUF->srcipaddr;
+              if (first_value >= mean)
+              {
+                ch_ipaddr = first_addr;
+              }
+            }
+            if (ch_list_struct[i].val >= mean)
+            {
+              ch_ipaddr = ch_list_struct[i].addr;
             }
           }
         }
@@ -271,9 +282,10 @@ tcpip_handler(void)
           ch_can_send = 1;
         }
 
+        tot = 0;
         count = 0;
-        free(ch_list);
-        ch_list = NULL;
+        free(ch_list_struct);
+        ch_list_struct = NULL;
       }
       else
       {
@@ -410,7 +422,7 @@ PROCESS_THREAD(udp_server_process, ev, data)
 
   etimer_set(&et_ch, 120 * CLOCK_SECOND);
   etimer_set(&et, 90 * CLOCK_SECOND);
-  etimer_set(&et_random, 30 * CLOCK_SECOND);
+  etimer_set(&et_random, 31 * CLOCK_SECOND);
   while (1)
   {
     PROCESS_YIELD();
@@ -432,7 +444,6 @@ PROCESS_THREAD(udp_server_process, ev, data)
     }
     if (etimer_expired(&et_random))
     {
-      random_number = abs(rand() % 1000 + 1);
       if (first_iteration == 0)
       {
         PRINTF("Sending A to ");
@@ -441,6 +452,8 @@ PROCESS_THREAD(udp_server_process, ev, data)
         uip_udp_packet_send(mcast_conn_ch, "A", strlen("A"));
         first_iteration++;
       }
+      random_number = abs(rand() % 1000 + 1);
+
       etimer_reset(&et_random);
     }
   }

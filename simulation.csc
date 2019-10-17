@@ -266,7 +266,7 @@
   <plugin>
     org.contikios.cooja.plugins.SimControl
     <width>280</width>
-    <z>0</z>
+    <z>1</z>
     <height>160</height>
     <location_x>827</location_x>
     <location_y>28</location_y>
@@ -292,15 +292,15 @@
   <plugin>
     org.contikios.cooja.plugins.LogListener
     <plugin_config>
-      <filter />
+      <filter>Tot</filter>
       <formatted_time />
       <coloring />
     </plugin_config>
-    <width>827</width>
-    <z>1</z>
-    <height>478</height>
-    <location_x>306</location_x>
-    <location_y>166</location_y>
+    <width>649</width>
+    <z>0</z>
+    <height>355</height>
+    <location_x>667</location_x>
+    <location_y>327</location_y>
   </plugin>
   <plugin>
     org.contikios.cooja.plugins.TimeLine
