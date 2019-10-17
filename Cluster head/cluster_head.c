@@ -46,9 +46,10 @@ static struct uip_udp_conn *mcast_conn_ch;
 static struct uip_udp_conn *ch_conn;
 static char buf[MAX_PAYLOAD_LEN];
 
-static unsigned int random_number;
+static int random_number;
 static int ch_can_send = 1;
-static int num_of_ch = -1;
+static int first_iteration = 0;
+static int num_of_ch = 0;
 static int count = 0;
 static uip_ipaddr_t ch_ipaddr;
 
@@ -129,7 +130,7 @@ multicast_send_ch(void)
   PRINT6ADDR(&mcast_conn_ch->ripaddr);
   PRINTF("\n");
 
-  sprintf(buf, "%d", random_number);
+  itoa(random_number, buf, 10);
   uip_udp_packet_send(mcast_conn_ch, buf, strlen(buf));
 }
 
@@ -221,14 +222,16 @@ tcpip_handler(void)
   {
     appdata = (char *)uip_appdata;
     appdata[uip_datalen()] = '\0';
-    if (strlen(appdata) == strlen("A") && !digits_only(appdata))
+    if (strcmp(appdata, "A") == 0)
     {
-      PRINTF("DAJE DC");
       num_of_ch++;
+      PRINTF("num_of_ch = %d\n", num_of_ch);
     }
     else if (digits_only(appdata))
     {
+      PRINTF("APPDATA: %s\n", appdata);
       int num = atoi(appdata);
+      PRINTF("NUM: %d\n", num);
       ch_list = malloc(num_of_ch * sizeof(ch_list_t));
       ch_list[count].val = num;
       ch_list[count].addr = UIP_IP_BUF->srcipaddr;
@@ -236,15 +239,19 @@ tcpip_handler(void)
       if (count == num_of_ch - 1)
       {
         int tot = random_number;
+        PRINTF("TOT: %d\n", tot);
         int i;
         for (i = 0; i <= count; i++)
         {
+          PRINTF("CH_LIST[I]: %d\n", ch_list[i].val);
           tot += ch_list[i].val;
+
+          PRINTF("TOT 2 LA VENDETTA: %d\n", tot);
         }
 
         int mean = tot / (num_of_ch + 1);
 
-        PRINTF("Mean = %d ; Random number: %d.\n", mean, random_number);
+        PRINTF("Tot = %d ; Random number: %d ; Mean = %d\n", tot, random_number, mean);
 
         if (mean > random_number)
         {
@@ -401,9 +408,9 @@ PROCESS_THREAD(udp_server_process, ev, data)
   ch_conn = udp_new(NULL, UIP_HTONS(0), NULL);
   udp_bind(ch_conn, UIP_HTONS(MCAST_SINK_UDP_PORT_CH));
 
-  etimer_set(&et_ch, 90 * CLOCK_SECOND);
-  etimer_set(&et, 80 * CLOCK_SECOND);
-  etimer_set(&et_random, 60 * CLOCK_SECOND);
+  etimer_set(&et_ch, 120 * CLOCK_SECOND);
+  etimer_set(&et, 90 * CLOCK_SECOND);
+  etimer_set(&et_random, 30 * CLOCK_SECOND);
   while (1)
   {
     PROCESS_YIELD();
@@ -426,10 +433,13 @@ PROCESS_THREAD(udp_server_process, ev, data)
     if (etimer_expired(&et_random))
     {
       random_number = abs(rand() % 1000 + 1);
-      if (num_of_ch == -1)
+      if (first_iteration == 0)
       {
+        PRINTF("Sending A to ");
+        PRINT6ADDR(&mcast_conn_ch->ripaddr);
+        PRINTF("\n");
         uip_udp_packet_send(mcast_conn_ch, "A", strlen("A"));
-        num_of_ch++;
+        first_iteration++;
       }
       etimer_reset(&et_random);
     }
