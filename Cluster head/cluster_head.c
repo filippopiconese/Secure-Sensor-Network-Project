@@ -1,32 +1,3 @@
-/*
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the Institute nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE INSTITUTE AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE INSTITUTE OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * This file is part of the Contiki operating system.
- *
- */
-
 #include "contiki.h"
 #include "contiki-lib.h"
 #include "contiki-net.h"
@@ -75,9 +46,19 @@ static struct uip_udp_conn *mcast_conn_ch;
 static struct uip_udp_conn *ch_conn;
 static char buf[MAX_PAYLOAD_LEN];
 
-static unsigned int randomNumber;
+static unsigned int random_number;
 static int ch_can_send = 1;
+static int num_of_ch = -1;
+static int count = 0;
 static uip_ipaddr_t ch_ipaddr;
+
+typedef struct ch_list
+{
+  int val;
+  uip_ipaddr_t addr;
+} ch_list_t;
+
+static ch_list_t *ch_list;
 
 PROCESS(udp_server_process, "UDP server process");
 AUTOSTART_PROCESSES(&udp_server_process);
@@ -144,11 +125,11 @@ multicast_send_ch(void)
 {
   char buf[5];
 
-  PRINTF("Sending CH multicast data '%d' to ", randomNumber);
+  PRINTF("Sending CH multicast data '%d' to ", random_number);
   PRINT6ADDR(&mcast_conn_ch->ripaddr);
   PRINTF("\n");
-  
-  sprintf(buf, "%d", randomNumber);
+
+  sprintf(buf, "%d", random_number);
   uip_udp_packet_send(mcast_conn_ch, buf, strlen(buf));
 }
 
@@ -219,8 +200,10 @@ calculate_RSSI(uip_ipaddr_t originator_ipaddr)
 
 int digits_only(const char *s)
 {
-  while (*s) {
-    if (isdigit(*s++) == 0) return 0;
+  while (*s)
+  {
+    if (isdigit(*s++) == 0)
+      return 0;
   }
 
   return 1;
@@ -237,19 +220,50 @@ tcpip_handler(void)
   {
     appdata = (char *)uip_appdata;
     appdata[uip_datalen()] = '\0';
-    if (digits_only(appdata))
+    if (strlen(appdata) == strlen("A") && !digits_only(appdata))
+    {
+      PRINTF("DAJE DC");
+      num_of_ch++;
+    }
+    else if (digits_only(appdata))
     {
       int num = atoi(appdata);
-      PRINTF("Received the random number: %d.\n", num);
-      if (num > randomNumber)
+      // PRINTF("Received the random number: %d.\n", num);
+      ch_list[count].val = num;
+      ch_list[count].addr = UIP_IP_BUF->srcipaddr;
+
+      if (count == num_of_ch - 1)
       {
-        ch_can_send = 0;
-        ch_ipaddr = UIP_IP_BUF->srcipaddr;
+        int tot = random_number;
+        int i;
+        for (i = 0; i <= count; i++)
+        {
+          tot += ch_list[i].val;
+        }
+        float mean = tot / (num_of_ch + 1);
+        if (mean > random_number)
+        {
+          PRINTF("I am NOT the cluster head\n");
+          ch_can_send = 0;
+          for (i = 0; i <= count; i++)
+          {
+            if (ch_list[i].val >= mean)
+            {
+              ch_ipaddr = UIP_IP_BUF->srcipaddr;
+            }
+          }
+        }
+        else
+        {
+          PRINTF("I am the cluster head\n");
+          ch_can_send = 1;
+        }
+
+        count = 0;
       }
       else
       {
-        PRINTF("I am the cluster head\n");
-        ch_can_send = 1;
+        count++;
       }
     }
     else
@@ -259,16 +273,19 @@ tcpip_handler(void)
       PRINT6ADDR(&client_ipaddr);
       PRINTF("\n");
 
-      if(ch_can_send) {
+      if (ch_can_send)
+      {
         // Try to redirect data to the border router
         send_packet(NULL, appdata, border_ipaddr, border_conn, UDP_BORDER_PORT);
-      } else {
+      }
+      else
+      {
         PRINTF("Send packet to cluster head ");
         PRINT6ADDR(&ch_ipaddr);
         PRINTF("\n");
         send_packet(NULL, appdata, ch_ipaddr, ch2ch_conn, UDP_CH_PORT);
       }
-      
+
       /* --------------------------------------------------- */
       // Send RSSI to client to regulate transmission power
       signed char rss = calculate_RSSI(client_ipaddr);
@@ -377,9 +394,9 @@ PROCESS_THREAD(udp_server_process, ev, data)
   ch_conn = udp_new(NULL, UIP_HTONS(0), NULL);
   udp_bind(ch_conn, UIP_HTONS(MCAST_SINK_UDP_PORT_CH));
 
-  etimer_set(&et_ch, 65 * CLOCK_SECOND);
-  etimer_set(&et, 60 * CLOCK_SECOND);
-  etimer_set(&et_random, 40 * CLOCK_SECOND);
+  etimer_set(&et_ch, 90 * CLOCK_SECOND);
+  etimer_set(&et, 80 * CLOCK_SECOND);
+  etimer_set(&et_random, 60 * CLOCK_SECOND);
   while (1)
   {
     PROCESS_YIELD();
@@ -390,6 +407,8 @@ PROCESS_THREAD(udp_server_process, ev, data)
     if (etimer_expired(&et_ch))
     {
       PRINTF("Sending CH multicast for CH election\n");
+      free(ch_list);
+      ch_list = malloc(num_of_ch * sizeof(ch_list_t));
       multicast_send_ch();
       etimer_set(&et_ch, CH_ELECTION_INTERVAL * CLOCK_SECOND);
     }
@@ -401,8 +420,13 @@ PROCESS_THREAD(udp_server_process, ev, data)
     }
     if (etimer_expired(&et_random))
     {
-      randomNumber = abs(rand() % 1000 + 1);
-      etimer_reset(&et_random);   
+      random_number = abs(rand() % 1000 + 1);
+      if (num_of_ch == -1)
+      {
+        uip_udp_packet_send(mcast_conn_ch, "A", strlen("A"));
+        num_of_ch++;
+      }
+      etimer_reset(&et_random);
     }
   }
 
