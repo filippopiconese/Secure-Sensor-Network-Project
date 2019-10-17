@@ -192,6 +192,7 @@ calculate_RSSI(uip_ipaddr_t originator_ipaddr)
   PRINTF("\nLQI = %d\n", *lqi);
 
   free(lqi);
+  lqi = NULL;
 
   return rss;
 }
@@ -228,7 +229,7 @@ tcpip_handler(void)
     else if (digits_only(appdata))
     {
       int num = atoi(appdata);
-      // PRINTF("Received the random number: %d.\n", num);
+      ch_list = malloc(num_of_ch * sizeof(ch_list_t));
       ch_list[count].val = num;
       ch_list[count].addr = UIP_IP_BUF->srcipaddr;
 
@@ -240,7 +241,11 @@ tcpip_handler(void)
         {
           tot += ch_list[i].val;
         }
-        float mean = tot / (num_of_ch + 1);
+
+        int mean = tot / (num_of_ch + 1);
+
+        PRINTF("Mean = %d ; Random number: %d.\n", mean, random_number);
+
         if (mean > random_number)
         {
           PRINTF("I am NOT the cluster head\n");
@@ -260,6 +265,8 @@ tcpip_handler(void)
         }
 
         count = 0;
+        free(ch_list);
+        ch_list = NULL;
       }
       else
       {
@@ -407,8 +414,6 @@ PROCESS_THREAD(udp_server_process, ev, data)
     if (etimer_expired(&et_ch))
     {
       PRINTF("Sending CH multicast for CH election\n");
-      free(ch_list);
-      ch_list = malloc(num_of_ch * sizeof(ch_list_t));
       multicast_send_ch();
       etimer_set(&et_ch, CH_ELECTION_INTERVAL * CLOCK_SECOND);
     }

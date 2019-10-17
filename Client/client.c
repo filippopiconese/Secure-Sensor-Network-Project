@@ -54,7 +54,7 @@
 #define MCAST_SINK_UDP_PORT 3001 /* Host byte order */
 
 #ifndef PERIOD
-#define PERIOD 65
+#define PERIOD 120
 #endif
 
 #define SEND_INTERVAL (PERIOD * CLOCK_SECOND)
@@ -126,7 +126,7 @@ adjust_transmission_power(char *rssi)
   PRINTF("The RSSI received from cluster node is %d dBm. TPower is %d\n", rssi_int, transmission_power);
   if (rssi_int >= -65 && transmission_power > 0)
   {
-    transmission_power-=2;
+    transmission_power -= 2;
     PRINTF("Lowering TPower to %d\n", transmission_power);
     cc2420_set_txpower(transmission_power);
   }
