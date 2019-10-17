@@ -54,12 +54,11 @@
 #define MCAST_SINK_UDP_PORT 3001 /* Host byte order */
 
 #ifndef PERIOD
-#define PERIOD 10
+#define PERIOD 65
 #endif
 
-#define START_INTERVAL (15 * CLOCK_SECOND)
 #define SEND_INTERVAL (PERIOD * CLOCK_SECOND)
-#define SEND_TIME (40 * CLOCK_SECOND)
+#define SEND_TIME (2 * CLOCK_SECOND)
 #define MAX_PAYLOAD_LEN 100
 
 static struct uip_udp_conn *client_conn;

@@ -53,6 +53,7 @@
 #define UDP_SERVER_PORT 6666
 #define UDP_SERVER1_PORT 8888
 #define UDP_BORDER_PORT 7777
+#define UDP_CH_PORT 4444
 #define MCAST_SINK_UDP_PORT 3001    /* Host byte order */
 #define MCAST_SINK_UDP_PORT_CH 3002 /* Host byte order */
 
@@ -65,6 +66,7 @@
 
 static struct uip_udp_conn *server_conn;
 static struct uip_udp_conn *border_conn;
+static struct uip_udp_conn *ch2ch_conn;
 
 static uip_ipaddr_t border_ipaddr;
 
@@ -73,8 +75,9 @@ static struct uip_udp_conn *mcast_conn_ch;
 static struct uip_udp_conn *ch_conn;
 static char buf[MAX_PAYLOAD_LEN];
 
-static int *randomNumberCH;
+static unsigned int randomNumber;
 static int ch_can_send = 1;
+static uip_ipaddr_t ch_ipaddr;
 
 PROCESS(udp_server_process, "UDP server process");
 AUTOSTART_PROCESSES(&udp_server_process);
@@ -139,12 +142,14 @@ prepare_mcast_ch(void)
 static void
 multicast_send_ch(void)
 {
-  *randomNumberCH = rand() % 100 + 1;
-  PRINTF("Sending multicast data '%d' to ", *randomNumberCH);
+  char buf[5];
+
+  PRINTF("Sending CH multicast data '%d' to ", randomNumber);
   PRINT6ADDR(&mcast_conn_ch->ripaddr);
   PRINTF("\n");
-
-  uip_udp_packet_send(mcast_conn_ch, randomNumberCH, 3);
+  
+  sprintf(buf, "%d", randomNumber);
+  uip_udp_packet_send(mcast_conn_ch, buf, strlen(buf));
 }
 
 /*---------------------------------------------------------------------------*/
@@ -211,6 +216,18 @@ calculate_RSSI(uip_ipaddr_t originator_ipaddr)
 }
 
 /*---------------------------------------------------------------------------*/
+
+int digits_only(const char *s)
+{
+  while (*s) {
+    if (isdigit(*s++) == 0) return 0;
+  }
+
+  return 1;
+}
+
+/*---------------------------------------------------------------------------*/
+
 static void
 tcpip_handler(void)
 {
@@ -218,35 +235,48 @@ tcpip_handler(void)
 
   if (uip_newdata())
   {
-    if (isdigit(uip_newdata()))
+    appdata = (char *)uip_appdata;
+    appdata[uip_datalen()] = '\0';
+    if (digits_only(appdata))
     {
-      if (uip_newdata() > *randomNumberCH && ch_can_send == 1)
+      int num = atoi(appdata);
+      PRINTF("Received the random number: %d.\n", num);
+      if (num > randomNumber)
       {
         ch_can_send = 0;
+        ch_ipaddr = UIP_IP_BUF->srcipaddr;
       }
       else
       {
+        PRINTF("I am the cluster head\n");
         ch_can_send = 1;
       }
     }
     else
     {
-      appdata = (char *)uip_appdata;
-      appdata[uip_datalen()] = 0;
       uip_ipaddr_t client_ipaddr = UIP_IP_BUF->srcipaddr;
       PRINTF("DATA recv '%s' from ", appdata);
       PRINT6ADDR(&client_ipaddr);
       PRINTF("\n");
 
-      signed char rss = calculate_RSSI(client_ipaddr);
-      // Try to redirect data to the border router
-      send_packet(NULL, appdata, border_ipaddr, border_conn, UDP_BORDER_PORT);
+      if(ch_can_send) {
+        // Try to redirect data to the border router
+        send_packet(NULL, appdata, border_ipaddr, border_conn, UDP_BORDER_PORT);
+      } else {
+        PRINTF("Send packet to cluster head ");
+        PRINT6ADDR(&ch_ipaddr);
+        PRINTF("\n");
+        send_packet(NULL, appdata, ch_ipaddr, ch2ch_conn, UDP_CH_PORT);
+      }
+      
       /* --------------------------------------------------- */
-      // Send RSSI to client
+      // Send RSSI to client to regulate transmission power
+      signed char rss = calculate_RSSI(client_ipaddr);
       char *rssi = malloc(4 * sizeof(char));
       snprintf(rssi, 4, "%d", rss);
       send_packet(NULL, rssi, client_ipaddr, server_conn, UDP_CLIENT_PORT);
       free(rssi);
+      rssi = NULL;
     }
   }
   else
@@ -291,9 +321,9 @@ PROCESS_THREAD(udp_server_process, ev, data)
 {
   static struct etimer et;
   static struct etimer et_ch;
+  static struct etimer et_random;
 
   PROCESS_BEGIN();
-
   PROCESS_PAUSE();
 
   PRINTF("Cluster head started. nbr:%d routes:%d\n",
@@ -307,6 +337,8 @@ PROCESS_THREAD(udp_server_process, ev, data)
   server_conn = udp_new(NULL, UIP_HTONS(UDP_CLIENT_PORT), NULL);
   // Connection to the border router
   border_conn = udp_new(NULL, UIP_HTONS(UDP_BORDER_PORT), NULL);
+  // Connection to the client
+  ch2ch_conn = udp_new(NULL, UIP_HTONS(UDP_CH_PORT), NULL);
   if (server_conn == NULL)
   {
     PRINTF("No UDP connection available with the client, exiting the process!\n");
@@ -320,7 +352,8 @@ PROCESS_THREAD(udp_server_process, ev, data)
   }
 
   udp_bind(server_conn, UIP_HTONS(UDP_SERVER_PORT));
-  udp_bind(border_conn, UIP_HTONS(UDP_SERVER1_PORT));
+  udp_bind(border_conn, UIP_HTONS(UDP_BORDER_PORT));
+  udp_bind(ch2ch_conn, UIP_HTONS(UDP_CH_PORT));
 
   PRINTF("Created a server connection with remote address client ");
   PRINT6ADDR(&server_conn->ripaddr);
@@ -344,9 +377,9 @@ PROCESS_THREAD(udp_server_process, ev, data)
   ch_conn = udp_new(NULL, UIP_HTONS(0), NULL);
   udp_bind(ch_conn, UIP_HTONS(MCAST_SINK_UDP_PORT_CH));
 
-  etimer_set(&et_ch, CLOCK_SECOND);
-  etimer_set(&et, 10 * CLOCK_SECOND);
-
+  etimer_set(&et_ch, 65 * CLOCK_SECOND);
+  etimer_set(&et, 60 * CLOCK_SECOND);
+  etimer_set(&et_random, 40 * CLOCK_SECOND);
   while (1)
   {
     PROCESS_YIELD();
@@ -365,6 +398,11 @@ PROCESS_THREAD(udp_server_process, ev, data)
       PRINTF("Sending multicast\n");
       multicast_send();
       etimer_set(&et, CH_MULTICAST_INTERVAL * CLOCK_SECOND);
+    }
+    if (etimer_expired(&et_random))
+    {
+      randomNumber = abs(rand() % 1000 + 1);
+      etimer_reset(&et_random);   
     }
   }
 
