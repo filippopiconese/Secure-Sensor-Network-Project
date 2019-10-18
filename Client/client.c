@@ -46,8 +46,6 @@
 #define UDP_CLIENT_PORT 8765
 #define UDP_SERVER_PORT 6666
 
-#define UDP_EXAMPLE_ID 190
-
 #define DEBUG DEBUG_FULL
 #include "net/ipv6/uip-debug.h"
 
@@ -78,11 +76,8 @@ static signed char
 calculate_RSSI(uip_ipaddr_t originator_ipaddr)
 {
   static signed char rss;
-  static signed char rss_val;
-  static signed char rss_offset;
-  rss_val = cc2420_last_rssi;
-  rss_offset = 0;
-  rss = rss_val + rss_offset;
+  rss = cc2420_last_rssi;
+
   PRINTF("RSSI of Last Packet Received is %d dBm from ", rss);
   PRINT6ADDR(&originator_ipaddr);
   PRINTF("\n");
@@ -116,6 +111,7 @@ join_mcast_group(void)
     PRINT6ADDR(&uip_ds6_maddr_lookup(&addr)->ipaddr);
     PRINTF("\n");
   }
+
   return rv;
 }
 
@@ -124,8 +120,10 @@ static void
 adjust_transmission_power(char *rssi)
 {
   uint16_t rssi_int = atoi(rssi);
+
   PRINTF("The RSSI received from cluster node is %d dBm. TPower is %d\n", rssi_int, transmission_power);
-  if (rssi_int >= -65 && transmission_power > 0)
+
+  if (rssi_int >= -65 && transmission_power > 2)
   {
     transmission_power -= 2;
     PRINTF("Lowering TPower to %d\n", transmission_power);
@@ -141,7 +139,7 @@ adjust_transmission_power(char *rssi)
     }
     else
     {
-      PRINTF("Nothing to improve. Transmission power is already at max value!\n");
+      PRINTF("The TPower is already at max value!\n");
     }
   }
   else
@@ -182,6 +180,7 @@ tcpip_handler(void)
       adjust_transmission_power(str);
     }
   }
+
   str = NULL;
 }
 

@@ -31,19 +31,17 @@
 #define SERVER_REPLY 1
 #define MAX_PAYLOAD_LEN 3
 
-#define UDP_EXAMPLE_ID 190
-// #define CH_MULTICAST_INTERVAL 180
-// #define CH_ELECTION_INTERVAL 300
-
 static struct uip_udp_conn *server_conn;
 static struct uip_udp_conn *border_conn;
 static struct uip_udp_conn *ch2ch_conn;
-
-static uip_ipaddr_t border_ipaddr;
-
 static struct uip_udp_conn *mcast_conn;
 static struct uip_udp_conn *mcast_conn_ch;
 static struct uip_udp_conn *ch_conn;
+
+static uip_ipaddr_t border_ipaddr;
+static uip_ipaddr_t ch_ipaddr;
+static uip_ipaddr_t first_addr;
+
 static char buf[MAX_PAYLOAD_LEN];
 
 static int random_number;
@@ -53,8 +51,6 @@ static int num_of_ch = 0;
 static int count = 0;
 static int tot = 0;
 static int first_value = 0;
-static uip_ipaddr_t ch_ipaddr;
-static uip_ipaddr_t first_addr;
 
 typedef struct ch_list
 {
