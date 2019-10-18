@@ -32,8 +32,8 @@
 #define MAX_PAYLOAD_LEN 3
 
 #define UDP_EXAMPLE_ID 190
-#define CH_MULTICAST_INTERVAL 180
-#define CH_ELECTION_INTERVAL 300
+// #define CH_MULTICAST_INTERVAL 180
+// #define CH_ELECTION_INTERVAL 300
 
 static struct uip_udp_conn *server_conn;
 static struct uip_udp_conn *border_conn;
@@ -362,9 +362,9 @@ set_global_address(void)
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(udp_server_process, ev, data)
 {
-  static struct etimer et;
-  static struct etimer et_ch;
-  static struct etimer et_random;
+  static struct etimer random_number_et;
+  static struct etimer ch_election_et;
+  static struct etimer multicast_et;
 
   PROCESS_BEGIN();
   PROCESS_PAUSE();
@@ -420,9 +420,9 @@ PROCESS_THREAD(udp_server_process, ev, data)
   ch_conn = udp_new(NULL, UIP_HTONS(0), NULL);
   udp_bind(ch_conn, UIP_HTONS(MCAST_SINK_UDP_PORT_CH));
 
-  etimer_set(&et_ch, 120 * CLOCK_SECOND);
-  etimer_set(&et, 90 * CLOCK_SECOND);
-  etimer_set(&et_random, 31 * CLOCK_SECOND);
+  etimer_set(&random_number_et, 60 * CLOCK_SECOND);
+  etimer_set(&ch_election_et, 90 * CLOCK_SECOND);
+  etimer_set(&multicast_et, 120 * CLOCK_SECOND);
   while (1)
   {
     PROCESS_YIELD();
@@ -430,19 +430,7 @@ PROCESS_THREAD(udp_server_process, ev, data)
     {
       tcpip_handler();
     }
-    if (etimer_expired(&et_ch))
-    {
-      PRINTF("Sending CH multicast for CH election\n");
-      multicast_send_ch();
-      etimer_set(&et_ch, CH_ELECTION_INTERVAL * CLOCK_SECOND);
-    }
-    if (etimer_expired(&et))
-    {
-      PRINTF("Sending multicast\n");
-      multicast_send();
-      etimer_set(&et, CH_MULTICAST_INTERVAL * CLOCK_SECOND);
-    }
-    if (etimer_expired(&et_random))
+    if (etimer_expired(&random_number_et))
     {
       if (first_iteration == 0)
       {
@@ -454,7 +442,19 @@ PROCESS_THREAD(udp_server_process, ev, data)
       }
       random_number = abs(rand() % 1000 + 1);
 
-      etimer_reset(&et_random);
+      etimer_set(&random_number_et, 150 * CLOCK_SECOND);
+    }
+    if (etimer_expired(&ch_election_et))
+    {
+      PRINTF("Sending CH multicast for CH election\n");
+      multicast_send_ch();
+      etimer_set(&ch_election_et, 150 * CLOCK_SECOND);
+    }
+    if (etimer_expired(&multicast_et))
+    {
+      PRINTF("Sending multicast\n");
+      multicast_send();
+      etimer_set(&multicast_et, 150 * CLOCK_SECOND);
     }
   }
 

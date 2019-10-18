@@ -54,9 +54,10 @@
 #define MCAST_SINK_UDP_PORT 3001 /* Host byte order */
 
 #ifndef PERIOD
-#define PERIOD 120
+#define PERIOD 31
 #endif
 
+#define SETUP_INTERVAL (150 * CLOCK_SECOND)
 #define SEND_INTERVAL (PERIOD * CLOCK_SECOND)
 #define SEND_TIME (2 * CLOCK_SECOND)
 #define MAX_PAYLOAD_LEN 100
@@ -260,7 +261,7 @@ PROCESS_THREAD(udp_client_process, ev, data)
   PRINTF(" local/remote port %u/%u\n",
          UIP_HTONS(client_conn->lport), UIP_HTONS(client_conn->rport));
 
-  etimer_set(&periodic, SEND_INTERVAL);
+  etimer_set(&periodic, SETUP_INTERVAL);
 
   while (1)
   {
@@ -272,7 +273,7 @@ PROCESS_THREAD(udp_client_process, ev, data)
 
     if (etimer_expired(&periodic))
     {
-      etimer_reset(&periodic);
+      etimer_set(&periodic, SEND_INTERVAL);
       ctimer_set(&backoff_timer, SEND_TIME, send_packet, NULL);
     }
   }
