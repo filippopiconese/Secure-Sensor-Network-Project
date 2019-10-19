@@ -234,15 +234,6 @@ PROCESS_THREAD(udp_client_process, ev, data)
 
   print_local_addresses();
 
-  // /* new connection with remote host */
-  // client_conn = udp_new(&ch_ipaddr, UIP_HTONS(UDP_SERVER_PORT), NULL);
-  // if (client_conn == NULL)
-  // {
-  //   PRINTF("No UDP connection available, exiting the process!\n");
-  //   PROCESS_EXIT();
-  // }
-  // udp_bind(client_conn, UIP_HTONS(UDP_CLIENT_PORT));
-
   client_conn = udp_new(NULL, UIP_HTONS(UDP_SERVER_PORT), NULL);
   udp_bind(client_conn, UIP_HTONS(UDP_CLIENT_PORT));
 

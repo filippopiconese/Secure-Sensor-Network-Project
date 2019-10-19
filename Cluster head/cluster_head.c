@@ -177,22 +177,11 @@ static signed char
 calculate_RSSI(uip_ipaddr_t originator_ipaddr)
 {
   static signed char rss;
-  static signed char rss_val;
-  static signed char rss_offset;
-  rss_val = cc2420_last_rssi;
-  rss_offset = 0;
-  rss = rss_val + rss_offset;
+  rss = cc2420_last_rssi;
+
   PRINTF("RSSI of Last Packet Received is %d dBm from ", rss);
   PRINT6ADDR(&originator_ipaddr);
-
-  // Calculate LQI
-  radio_value_t *lqi = malloc(sizeof(radio_value_t));
-  cc2420_driver.get_value(RADIO_PARAM_LAST_LINK_QUALITY, lqi);
-
-  PRINTF("\nLQI = %d\n", *lqi);
-
-  free(lqi);
-  lqi = NULL;
+  PRINTF("\n");
 
   return rss;
 }
@@ -448,7 +437,7 @@ PROCESS_THREAD(udp_server_process, ev, data)
     }
     if (etimer_expired(&multicast_et))
     {
-      PRINTF("Sending multicast\n");
+      PRINTF("Sending multicast to clients to let them select the best CH\n");
       multicast_send();
       etimer_set(&multicast_et, 150 * CLOCK_SECOND);
     }
