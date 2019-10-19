@@ -27,8 +27,7 @@
 #define MCAST_SINK_UDP_PORT 3001
 #define MCAST_SINK_UDP_PORT_CH 3002
 
-#define SERVER_REPLY 1
-#define MAX_PAYLOAD_LEN 3
+#define MAX_PAYLOAD_LEN 5
 
 static struct uip_udp_conn *client_conn;
 static struct uip_udp_conn *border_conn;
@@ -41,7 +40,7 @@ static uip_ipaddr_t border_ipaddr;
 static uip_ipaddr_t ch_ipaddr;
 static uip_ipaddr_t first_addr;
 
-static char buf[MAX_PAYLOAD_LEN];
+static char random_number_string[MAX_PAYLOAD_LEN];
 
 static int random_number;
 static int ch_can_send = 1;
@@ -63,73 +62,32 @@ PROCESS(udp_server_process, "UDP server process");
 AUTOSTART_PROCESSES(&udp_server_process);
 
 /*---------------------------------------------------------------------------*/
-static void
-prepare_mcast(void)
+struct uip_udp_conn *
+prepare_mcast(int port)
 {
   uip_ipaddr_t ipaddr;
 
-#if UIP_MCAST6_CONF_ENGINE == UIP_MCAST6_ENGINE_MPL
-  /*
-   * MPL defines a well-known MPL domain, MPL_ALL_FORWARDERS, which
-   *  MPL nodes are automatically members of. Send to that domain.
-   */
-  uip_ip6addr(&ipaddr, 0xFF03, 0, 0, 0, 0, 0, 0, 0xFC);
-#else
-  /*
-   * IPHC will use stateless multicast compression for this destination
-   * (M=1, DAC=0), with 32 inline bits (1E 89 AB CD)
-   */
   uip_ip6addr(&ipaddr, 0xFF1E, 0, 0, 0, 0, 0, 0x89, 0xABCD);
-#endif
-  mcast_conn = udp_new(&ipaddr, UIP_HTONS(MCAST_SINK_UDP_PORT), NULL);
+
+  return udp_new(&ipaddr, UIP_HTONS(port), NULL);
 }
 
 /*---------------------------------------------------------------------------*/
 static void
-multicast_send(void)
+multicast_send(char *message, struct uip_udp_conn *connection)
 {
-  sprintf(buf, "CH");
-  PRINTF("Sending multicast data '%s' to ", buf);
-  PRINT6ADDR(&mcast_conn->ripaddr);
-  PRINTF("\n");
+  if (strlen(message) <= MAX_PAYLOAD_LEN)
+  {
+    PRINTF("Sending multicast data '%s' to ", message);
+    PRINT6ADDR(&connection->ripaddr);
+    PRINTF("\n");
 
-  uip_udp_packet_send(mcast_conn, buf, strlen(buf));
-}
-
-/*---------------------------------------------------------------------------*/
-static void
-prepare_mcast_ch(void)
-{
-  uip_ipaddr_t ipaddr;
-
-#if UIP_MCAST6_CONF_ENGINE == UIP_MCAST6_ENGINE_MPL
-  /*
-   * MPL defines a well-known MPL domain, MPL_ALL_FORWARDERS, which
-   *  MPL nodes are automatically members of. Send to that domain.
-   */
-  uip_ip6addr(&ipaddr, 0xFF03, 0, 0, 0, 0, 0, 0, 0xFC);
-#else
-  /*
-   * IPHC will use stateless multicast compression for this destination
-   * (M=1, DAC=0), with 32 inline bits (1E 89 AB CD)
-   */
-  uip_ip6addr(&ipaddr, 0xFF1E, 0, 0, 0, 0, 0, 0x89, 0xABCD);
-#endif
-  mcast_conn_ch = udp_new(&ipaddr, UIP_HTONS(MCAST_SINK_UDP_PORT_CH), NULL);
-}
-
-/*---------------------------------------------------------------------------*/
-static void
-multicast_send_ch(void)
-{
-  char buf[5];
-
-  PRINTF("Sending CH multicast data '%d' to ", random_number);
-  PRINT6ADDR(&mcast_conn_ch->ripaddr);
-  PRINTF("\n");
-
-  itoa(random_number, buf, 10);
-  uip_udp_packet_send(mcast_conn_ch, buf, strlen(buf));
+    uip_udp_packet_send(connection, message, strlen(message));
+  }
+  else
+  {
+    PRINTF("The payload of the multicast is too big!");
+  }
 }
 
 /*---------------------------------------------------------------------------*/
@@ -389,8 +347,8 @@ PROCESS_THREAD(udp_server_process, ev, data)
   PRINTF(" local/remote port %u/%u\n", UIP_HTONS(border_conn->lport),
          UIP_HTONS(border_conn->rport));
 
-  prepare_mcast();
-  prepare_mcast_ch();
+  mcast_conn = prepare_mcast(MCAST_SINK_UDP_PORT);
+  mcast_conn_ch = prepare_mcast(MCAST_SINK_UDP_PORT_CH);
 
   if (join_mcast_group_ch() == NULL)
   {
@@ -415,10 +373,7 @@ PROCESS_THREAD(udp_server_process, ev, data)
     {
       if (first_iteration == 0)
       {
-        PRINTF("Sending A to ");
-        PRINT6ADDR(&mcast_conn_ch->ripaddr);
-        PRINTF("\n");
-        uip_udp_packet_send(mcast_conn_ch, "A", strlen("A"));
+        multicast_send("A", mcast_conn_ch);
         first_iteration++;
       }
       random_number = abs(rand() % 1000 + 1);
@@ -428,13 +383,17 @@ PROCESS_THREAD(udp_server_process, ev, data)
     if (etimer_expired(&ch_election_et))
     {
       PRINTF("Sending CH multicast for CH election\n");
-      multicast_send_ch();
+
+      itoa(random_number, random_number_string, 10);
+      multicast_send(random_number_string, mcast_conn_ch);
+
       etimer_set(&ch_election_et, 150 * CLOCK_SECOND);
     }
     if (etimer_expired(&multicast_et))
     {
       PRINTF("Sending multicast to clients to let them select the best CH\n");
-      multicast_send();
+
+      multicast_send("CH", mcast_conn);
       etimer_set(&multicast_et, 150 * CLOCK_SECOND);
     }
   }
