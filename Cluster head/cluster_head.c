@@ -321,6 +321,9 @@ PROCESS_THREAD(udp_server_process, ev, data)
   border_conn = udp_new(NULL, UIP_HTONS(UDP_BORDER_PORT), NULL);
   // Connection to the client
   ch2ch_conn = udp_new(NULL, UIP_HTONS(UDP_CH2CH_PORT), NULL);
+  // Connection to the other cluster heads
+  ch_conn = udp_new(NULL, UIP_HTONS(0), NULL);
+
   if (client_conn == NULL)
   {
     PRINTF("No UDP connection available with the client, exiting the process!\n");
@@ -336,6 +339,7 @@ PROCESS_THREAD(udp_server_process, ev, data)
   udp_bind(client_conn, UIP_HTONS(UDP_CH_LISTENING_PORT));
   udp_bind(border_conn, UIP_HTONS(UDP_BORDER_PORT));
   udp_bind(ch2ch_conn, UIP_HTONS(UDP_CH2CH_PORT));
+  udp_bind(ch_conn, UIP_HTONS(MCAST_SINK_UDP_PORT_CH));
 
   PRINTF("Created a connection with remote address client ");
   PRINT6ADDR(&client_conn->ripaddr);
@@ -355,9 +359,6 @@ PROCESS_THREAD(udp_server_process, ev, data)
     PRINTF("Failed to join multicast_ch group\n");
     PROCESS_EXIT();
   }
-
-  ch_conn = udp_new(NULL, UIP_HTONS(0), NULL);
-  udp_bind(ch_conn, UIP_HTONS(MCAST_SINK_UDP_PORT_CH));
 
   etimer_set(&random_number_et, 60 * CLOCK_SECOND);
   etimer_set(&ch_election_et, 90 * CLOCK_SECOND);
