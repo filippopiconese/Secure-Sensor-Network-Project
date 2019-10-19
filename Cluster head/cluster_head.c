@@ -20,18 +20,17 @@
 #define UIP_IP_BUF ((struct uip_ip_hdr *)&uip_buf[UIP_LLH_LEN])
 #endif
 
-#define UDP_CLIENT_PORT 8765
-#define UDP_SERVER_PORT 6666
-#define UDP_SERVER1_PORT 8888
+#define UDP_CLIENT_LISTENING_PORT 8765
+#define UDP_CH_LISTENING_PORT 6666
 #define UDP_BORDER_PORT 7777
-#define UDP_CH_PORT 4444
-#define MCAST_SINK_UDP_PORT 3001    /* Host byte order */
-#define MCAST_SINK_UDP_PORT_CH 3002 /* Host byte order */
+#define UDP_CH2CH_PORT 4444
+#define MCAST_SINK_UDP_PORT 3001
+#define MCAST_SINK_UDP_PORT_CH 3002
 
 #define SERVER_REPLY 1
 #define MAX_PAYLOAD_LEN 3
 
-static struct uip_udp_conn *server_conn;
+static struct uip_udp_conn *client_conn;
 static struct uip_udp_conn *border_conn;
 static struct uip_udp_conn *ch2ch_conn;
 static struct uip_udp_conn *mcast_conn;
@@ -294,7 +293,7 @@ tcpip_handler(void)
         PRINTF("Send packet to cluster head ");
         PRINT6ADDR(&ch_ipaddr);
         PRINTF("\n");
-        send_packet(NULL, appdata, ch_ipaddr, ch2ch_conn, UDP_CH_PORT);
+        send_packet(NULL, appdata, ch_ipaddr, ch2ch_conn, UDP_CH2CH_PORT);
       }
 
       /* --------------------------------------------------- */
@@ -302,7 +301,7 @@ tcpip_handler(void)
       signed char rss = calculate_RSSI(client_ipaddr);
       char *rssi = malloc(4 * sizeof(char));
       snprintf(rssi, 4, "%d", rss);
-      send_packet(NULL, rssi, client_ipaddr, server_conn, UDP_CLIENT_PORT);
+      send_packet(NULL, rssi, client_ipaddr, client_conn, UDP_CLIENT_LISTENING_PORT);
       free(rssi);
       rssi = NULL;
     }
@@ -354,20 +353,17 @@ PROCESS_THREAD(udp_server_process, ev, data)
   PROCESS_BEGIN();
   PROCESS_PAUSE();
 
-  PRINTF("Cluster head started. nbr:%d routes:%d\n",
-         NBR_TABLE_CONF_MAX_NEIGHBORS, UIP_CONF_MAX_ROUTES);
-
   set_global_address();
 
   print_local_addresses();
 
   // Connection to the client
-  server_conn = udp_new(NULL, UIP_HTONS(UDP_CLIENT_PORT), NULL);
+  client_conn = udp_new(NULL, UIP_HTONS(UDP_CLIENT_LISTENING_PORT), NULL);
   // Connection to the border router
   border_conn = udp_new(NULL, UIP_HTONS(UDP_BORDER_PORT), NULL);
   // Connection to the client
-  ch2ch_conn = udp_new(NULL, UIP_HTONS(UDP_CH_PORT), NULL);
-  if (server_conn == NULL)
+  ch2ch_conn = udp_new(NULL, UIP_HTONS(UDP_CH2CH_PORT), NULL);
+  if (client_conn == NULL)
   {
     PRINTF("No UDP connection available with the client, exiting the process!\n");
     PROCESS_EXIT();
@@ -379,14 +375,14 @@ PROCESS_THREAD(udp_server_process, ev, data)
     PROCESS_EXIT();
   }
 
-  udp_bind(server_conn, UIP_HTONS(UDP_SERVER_PORT));
+  udp_bind(client_conn, UIP_HTONS(UDP_CH_LISTENING_PORT));
   udp_bind(border_conn, UIP_HTONS(UDP_BORDER_PORT));
-  udp_bind(ch2ch_conn, UIP_HTONS(UDP_CH_PORT));
+  udp_bind(ch2ch_conn, UIP_HTONS(UDP_CH2CH_PORT));
 
-  PRINTF("Created a server connection with remote address client ");
-  PRINT6ADDR(&server_conn->ripaddr);
-  PRINTF(" local/remote port %u/%u\n", UIP_HTONS(server_conn->lport),
-         UIP_HTONS(server_conn->rport));
+  PRINTF("Created a connection with remote address client ");
+  PRINT6ADDR(&client_conn->ripaddr);
+  PRINTF(" local/remote port %u/%u\n", UIP_HTONS(client_conn->lport),
+         UIP_HTONS(client_conn->rport));
 
   PRINTF("Created a server connection with remote address border router ");
   PRINT6ADDR(&border_conn->ripaddr);

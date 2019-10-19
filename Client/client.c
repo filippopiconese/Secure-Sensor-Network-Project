@@ -43,8 +43,8 @@
 
 #include "cc2420.h"
 
-#define UDP_CLIENT_PORT 8765
-#define UDP_SERVER_PORT 6666
+#define UDP_CLIENT_LISTENING_PORT 8765
+#define UDP_CH_LISTENING_PORT 6666
 
 #define DEBUG DEBUG_FULL
 #include "net/ipv6/uip-debug.h"
@@ -194,7 +194,7 @@ send_packet(void *ptr)
   PRINTF("Sending data '%s' to ", buf);
   PRINT6ADDR(&ch_ipaddr);
   PRINTF("\n");
-  uip_udp_packet_sendto(client_conn, buf, strlen(buf), &ch_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
+  uip_udp_packet_sendto(client_conn, buf, strlen(buf), &ch_ipaddr, UIP_HTONS(UDP_CH_LISTENING_PORT));
 }
 
 /*---------------------------------------------------------------------------*/
@@ -234,8 +234,8 @@ PROCESS_THREAD(udp_client_process, ev, data)
 
   print_local_addresses();
 
-  client_conn = udp_new(NULL, UIP_HTONS(UDP_SERVER_PORT), NULL);
-  udp_bind(client_conn, UIP_HTONS(UDP_CLIENT_PORT));
+  client_conn = udp_new(NULL, UIP_HTONS(UDP_CH_LISTENING_PORT), NULL);
+  udp_bind(client_conn, UIP_HTONS(UDP_CLIENT_LISTENING_PORT));
 
   if (join_mcast_group() == NULL)
   {
