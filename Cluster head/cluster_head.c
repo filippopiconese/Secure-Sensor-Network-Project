@@ -38,7 +38,6 @@ static struct uip_udp_conn *ch_conn;
 
 static uip_ipaddr_t border_ipaddr;
 static uip_ipaddr_t ch_ipaddr;
-static uip_ipaddr_t first_addr;
 
 static char random_number_string[MAX_PAYLOAD_LEN];
 
@@ -48,7 +47,6 @@ static int first_iteration = 0;
 static int num_of_ch = 0;
 static int count = 0;
 static int tot = 0;
-static int first_value = 0;
 
 typedef struct ch_list
 {
@@ -56,7 +54,7 @@ typedef struct ch_list
   uip_ipaddr_t addr;
 } ch_list_t;
 
-static ch_list_t *ch_list_struct;
+static ch_list_t *ch_list_struct = NULL;
 
 PROCESS(udp_server_process, "UDP server process");
 AUTOSTART_PROCESSES(&udp_server_process);
@@ -173,22 +171,19 @@ tcpip_handler(void)
       num_of_ch++;
       PRINTF("num_of_ch = %d\n", num_of_ch);
     }
-    else if (digits_only(appdata))
+
+    if (digits_only(appdata))
     {
       int num = atoi(appdata);
 
-      ch_list_struct = malloc(num_of_ch * sizeof(ch_list_t));
-      if (count == 0)
+      if (!ch_list_struct)
       {
-        first_value = num;
-        first_addr = UIP_IP_BUF->srcipaddr;
-      }
-      else
-      {
-        ch_list_struct[count] = (ch_list_t){.val = num, .addr = UIP_IP_BUF->srcipaddr};
+        ch_list_struct = malloc(num_of_ch * sizeof(ch_list_t));
       }
 
-      tot += num;
+      ch_list_struct[count] = (ch_list_t){.val = num, .addr = UIP_IP_BUF->srcipaddr};
+
+      tot += ch_list_struct[count].val;
 
       if (count == num_of_ch - 1)
       {
@@ -205,16 +200,10 @@ tcpip_handler(void)
           int i;
           for (i = 0; i <= count; i++)
           {
-            if (i == 0)
-            {
-              if (first_value >= mean)
-              {
-                ch_ipaddr = first_addr;
-              }
-            }
             if (ch_list_struct[i].val >= mean)
             {
               ch_ipaddr = ch_list_struct[i].addr;
+              break;
             }
           }
         }
@@ -234,7 +223,8 @@ tcpip_handler(void)
         count++;
       }
     }
-    else
+
+    if (strcmp(appdata, "A") != 0 && !digits_only(appdata))
     {
       uip_ipaddr_t client_ipaddr = UIP_IP_BUF->srcipaddr;
       PRINTF("DATA recv '%s' from ", appdata);
@@ -243,23 +233,24 @@ tcpip_handler(void)
 
       if (ch_can_send)
       {
-        // Try to redirect data to the border router
+        // Redirect data to the border router
         send_packet(NULL, appdata, border_ipaddr, border_conn, UDP_BORDER_PORT);
       }
       else
       {
-        PRINTF("Send packet to cluster head ");
+        // Redirect data to an active CH
+        PRINTF("Send packet to the cluster head: ");
         PRINT6ADDR(&ch_ipaddr);
         PRINTF("\n");
         send_packet(NULL, appdata, ch_ipaddr, ch2ch_conn, UDP_CH2CH_PORT);
       }
 
-      /* --------------------------------------------------- */
       // Send RSSI to client to regulate transmission power
       signed char rss = calculate_RSSI(client_ipaddr);
       char *rssi = malloc(4 * sizeof(char));
       snprintf(rssi, 4, "%d", rss);
       send_packet(NULL, rssi, client_ipaddr, client_conn, UDP_CLIENT_LISTENING_PORT);
+
       free(rssi);
       rssi = NULL;
     }
