@@ -3,12 +3,14 @@
 #include <netinet/in.h>
 #include <string.h>
 
-#define BUF_SIZE 11
+#define BUF_SIZE 100
 
 struct sockaddr_in6 i6sock;
 
-int main() {
+int main()
+{
     int sock = socket(AF_INET6, SOCK_DGRAM, 0);
+    int bytes_received = 0;
     char buf[BUF_SIZE];
 
     //assign port number, family and address to the structure
@@ -20,21 +22,20 @@ int main() {
     i6sock.sin6_addr = in6addr_any;
 
     socklen_t addressLength = sizeof(struct sockaddr *);
-    int stat = bind(sock, (struct sockaddr*) &i6sock, sizeof(i6sock));
-    if(stat == -1) {
+
+    if (bind(sock, (struct sockaddr *)&i6sock, sizeof(i6sock)) < 0)
+    {
         printf("Error binding socket. Closing the server!\n");
         return -1;
     }
-    printf("UDP server is running on port %d\n", port);
-    while(1) {
-        stat = recvfrom(sock, buf, BUF_SIZE, 0, (struct sockaddr*) &i6sock, (socklen_t *)&addressLength);
-        
-        printf("Received message: %s\n", buf);
 
-        // char* response = "Border router reply";
-        // if(sendto(sock, response, strlen(response), 1, (struct sockaddr*) &i6sock, (socklen_t)addressLength) != -1) {
-        //     printf("Sending back a response\n");
-        // }
+    printf("UDP server is running on port %d\n", port);
+    while (1)
+    {
+        bytes_received = recvfrom(sock, buf, sizeof(buf), 0, (struct sockaddr *)&i6sock, (socklen_t *)&addressLength);
+
+        printf("\nData received: '%.*s'", bytes_received, buf);
     }
+
     return 0;
 }

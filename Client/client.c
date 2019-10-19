@@ -32,6 +32,7 @@
 #include "net/ipv6/uip.h"
 #include "net/ipv6/uip-ds6.h"
 #include "net/ipv6/uip-udp-packet.h"
+#include "node-id.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -51,17 +52,12 @@
 
 #define MCAST_SINK_UDP_PORT 3001 /* Host byte order */
 
-#ifndef PERIOD
-#define PERIOD 31
-#endif
-
 #define SETUP_INTERVAL (150 * CLOCK_SECOND)
-#define SEND_INTERVAL (PERIOD * CLOCK_SECOND)
-#define SEND_TIME (2 * CLOCK_SECOND)
+#define SEND_INTERVAL (31 * CLOCK_SECOND)
 #define MAX_PAYLOAD_LEN 100
 
-static struct uip_udp_conn *client_conn;
-static struct uip_udp_conn *sink_conn;
+static struct uip_udp_conn *ch_conn;
+static struct uip_udp_conn *multicast_conn;
 static uip_ipaddr_t ch_ipaddr;
 
 /*---------------------------------------------------------------------------*/
@@ -121,6 +117,7 @@ adjust_transmission_power(char *rssi)
 {
   uint16_t rssi_int = atoi(rssi);
 
+  // Note that the optimal TPower to have a reliable packet transmission is: -70 <= TPower < -65
   PRINTF("The RSSI received from cluster node is %d dBm. TPower is %d\n", rssi_int, transmission_power);
 
   if (rssi_int >= -65 && transmission_power > 2)
@@ -129,7 +126,8 @@ adjust_transmission_power(char *rssi)
     PRINTF("Lowering TPower to %d\n", transmission_power);
     cc2420_set_txpower(transmission_power);
   }
-  else if (rssi_int < -70)
+
+  if (rssi_int < -70)
   {
     if (transmission_power < 31)
     {
@@ -139,12 +137,8 @@ adjust_transmission_power(char *rssi)
     }
     else
     {
-      PRINTF("The TPower is already at max value!\n");
+      PRINTF("The TPower is already at max value\n");
     }
-  }
-  else
-  {
-    PRINTF("Optimal TPower reached\n");
   }
 }
 
@@ -152,36 +146,35 @@ adjust_transmission_power(char *rssi)
 static void
 tcpip_handler(void)
 {
-  char *str;
+  char *appdata;
 
   if (uip_newdata())
   {
-    str = uip_appdata;
+    appdata = (char *)uip_appdata;
+    appdata[uip_datalen()] = '\0';
 
-    if (strlen(str) < 3)
+    if (strcmp(appdata, "CH") == 0)
     {
       signed char rssi_tmp = calculate_RSSI(UIP_IP_BUF->srcipaddr);
       if (rssi_tmp > best_rssi)
       {
         best_rssi = rssi_tmp;
         ch_ipaddr = UIP_IP_BUF->srcipaddr;
-        PRINTF("New CH is ");
+        PRINTF("The new CH is ");
         PRINT6ADDR(&ch_ipaddr);
         PRINTF("\n");
       }
       else
       {
-        PRINTF("Best CH already set\n");
+        PRINTF("The best CH has been already set\n");
       }
     }
     else
     {
-      str[uip_datalen()] = '\0';
-      adjust_transmission_power(str);
+      // It means that the CH sent back the RSSI value to the client
+      adjust_transmission_power(appdata);
     }
   }
-
-  str = NULL;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -190,11 +183,11 @@ send_packet(void *ptr)
 {
   char buf[MAX_PAYLOAD_LEN];
 
-  sprintf(buf, "Hello world");
+  sprintf(buf, "Client node ID = %d", node_id);
   PRINTF("Sending data '%s' to ", buf);
   PRINT6ADDR(&ch_ipaddr);
   PRINTF("\n");
-  uip_udp_packet_sendto(client_conn, buf, strlen(buf), &ch_ipaddr, UIP_HTONS(UDP_CH_LISTENING_PORT));
+  uip_udp_packet_sendto(ch_conn, buf, strlen(buf), &ch_ipaddr, UIP_HTONS(UDP_CH_LISTENING_PORT));
 }
 
 /*---------------------------------------------------------------------------*/
@@ -226,7 +219,6 @@ print_local_addresses(void)
 PROCESS_THREAD(udp_client_process, ev, data)
 {
   static struct etimer periodic;
-  static struct ctimer backoff_timer;
 
   PROCESS_BEGIN();
 
@@ -234,8 +226,11 @@ PROCESS_THREAD(udp_client_process, ev, data)
 
   print_local_addresses();
 
-  client_conn = udp_new(NULL, UIP_HTONS(UDP_CH_LISTENING_PORT), NULL);
-  udp_bind(client_conn, UIP_HTONS(UDP_CLIENT_LISTENING_PORT));
+  ch_conn = udp_new(NULL, UIP_HTONS(UDP_CH_LISTENING_PORT), NULL);
+  multicast_conn = udp_new(NULL, UIP_HTONS(0), NULL);
+
+  udp_bind(ch_conn, UIP_HTONS(UDP_CLIENT_LISTENING_PORT));
+  udp_bind(multicast_conn, UIP_HTONS(MCAST_SINK_UDP_PORT));
 
   if (join_mcast_group() == NULL)
   {
@@ -243,13 +238,10 @@ PROCESS_THREAD(udp_client_process, ev, data)
     PROCESS_EXIT();
   }
 
-  sink_conn = udp_new(NULL, UIP_HTONS(0), NULL);
-  udp_bind(sink_conn, UIP_HTONS(MCAST_SINK_UDP_PORT));
-
-  PRINTF("Created a connection with the server ");
-  PRINT6ADDR(&client_conn->ripaddr);
+  PRINTF("Created a connection with the cluster head ");
+  PRINT6ADDR(&ch_conn->ripaddr);
   PRINTF(" local/remote port %u/%u\n",
-         UIP_HTONS(client_conn->lport), UIP_HTONS(client_conn->rport));
+         UIP_HTONS(ch_conn->lport), UIP_HTONS(ch_conn->rport));
 
   etimer_set(&periodic, SETUP_INTERVAL);
 
@@ -264,7 +256,7 @@ PROCESS_THREAD(udp_client_process, ev, data)
     if (etimer_expired(&periodic))
     {
       etimer_set(&periodic, SEND_INTERVAL);
-      ctimer_set(&backoff_timer, SEND_TIME, send_packet, NULL);
+      send_packet(NULL);
     }
   }
   PROCESS_END();

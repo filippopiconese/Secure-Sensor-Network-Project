@@ -174,15 +174,12 @@ tcpip_handler(void)
 
     if (digits_only(appdata))
     {
-      int num = atoi(appdata);
-
       if (!ch_list_struct)
       {
         ch_list_struct = malloc(num_of_ch * sizeof(ch_list_t));
       }
 
-      ch_list_struct[count] = (ch_list_t){.val = num, .addr = UIP_IP_BUF->srcipaddr};
-
+      ch_list_struct[count] = (ch_list_t){.val = atoi(appdata), .addr = UIP_IP_BUF->srcipaddr};
       tot += ch_list_struct[count].val;
 
       if (count == num_of_ch - 1)
@@ -193,7 +190,12 @@ tcpip_handler(void)
 
         PRINTF("Tot = %d ; Random number: %d ; Mean = %d\n", tot, random_number, mean);
 
-        if (mean > random_number)
+        if (random_number >= mean)
+        {
+          PRINTF("I am the cluster head\n");
+          ch_can_send = 1;
+        }
+        else
         {
           PRINTF("I am NOT the cluster head\n");
           ch_can_send = 0;
@@ -202,15 +204,11 @@ tcpip_handler(void)
           {
             if (ch_list_struct[i].val >= mean)
             {
+              // Select an active cluster head
               ch_ipaddr = ch_list_struct[i].addr;
               break;
             }
           }
-        }
-        else
-        {
-          PRINTF("I am the cluster head\n");
-          ch_can_send = 1;
         }
 
         tot = 0;
@@ -254,10 +252,6 @@ tcpip_handler(void)
       free(rssi);
       rssi = NULL;
     }
-  }
-  else
-  {
-    PRINTF("No DATA\n");
   }
 }
 
@@ -361,6 +355,7 @@ PROCESS_THREAD(udp_server_process, ev, data)
     {
       tcpip_handler();
     }
+
     if (etimer_expired(&random_number_et))
     {
       if (first_iteration == 0)
@@ -372,6 +367,7 @@ PROCESS_THREAD(udp_server_process, ev, data)
 
       etimer_set(&random_number_et, 150 * CLOCK_SECOND);
     }
+
     if (etimer_expired(&ch_election_et))
     {
       PRINTF("Sending CH multicast for CH election\n");
@@ -381,6 +377,7 @@ PROCESS_THREAD(udp_server_process, ev, data)
 
       etimer_set(&ch_election_et, 150 * CLOCK_SECOND);
     }
+
     if (etimer_expired(&multicast_et))
     {
       PRINTF("Sending multicast to clients to let them select the best CH\n");
