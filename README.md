@@ -10,6 +10,5 @@
 ## Next steps
 - [X] Add client CH selection based on the RSSI of the received multicast message sent by the CH. In this way, the client can add the nearest CH which is the one with the greater RSSI.
 - [X] Change randomly the CHs selection.
-- [ ] Implement an aggregation algorithm at cluster head.
 - [X] Fix optimal power function.
 - [X] CH selection does not work at first iteration.

@@ -186,11 +186,11 @@ tcpip_handler(void)
       {
         tot += random_number;
 
-        int mean = tot / (num_of_ch + 1);
+        int average = tot / (num_of_ch + 1);
 
-        PRINTF("Tot = %d ; Random number: %d ; Mean = %d\n", tot, random_number, mean);
+        PRINTF("Tot = %d ; Random number: %d ; Average = %d\n", tot, random_number, average);
 
-        if (random_number >= mean)
+        if (random_number >= average)
         {
           PRINTF("I am the cluster head\n");
           ch_can_send = 1;
@@ -202,7 +202,7 @@ tcpip_handler(void)
           int i;
           for (i = 0; i <= count; i++)
           {
-            if (ch_list_struct[i].val >= mean)
+            if (ch_list_struct[i].val >= average)
             {
               // Select an active cluster head
               ch_ipaddr = ch_list_struct[i].addr;

@@ -117,7 +117,7 @@ adjust_transmission_power(char *rssi)
 {
   uint16_t rssi_int = atoi(rssi);
 
-  // Note that the optimal TPower to have a reliable packet transmission is: -70 <= TPower < -65
+  // Note that the optimal RSSI to have a reliable packet transmission is: -70 <= TPower < -65
   PRINTF("The RSSI received from cluster node is %d dBm. TPower is %d\n", rssi_int, transmission_power);
 
   if (rssi_int >= -65 && transmission_power > 2)
