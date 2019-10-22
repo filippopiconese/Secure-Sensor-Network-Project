@@ -32,31 +32,25 @@
 
 #ifndef WITH_NON_STORING
 #define WITH_NON_STORING 0 /* Set this to run with non-storing mode */
-#endif /* WITH_NON_STORING */
+#endif                     /* WITH_NON_STORING */
 
 #undef NBR_TABLE_CONF_MAX_NEIGHBORS
 #undef UIP_CONF_MAX_ROUTES
 
-#ifdef TEST_MORE_ROUTES
 /* configure number of neighbors and routes */
-#define NBR_TABLE_CONF_MAX_NEIGHBORS     5
-#define UIP_CONF_MAX_ROUTES   10
-#else
-/* configure number of neighbors and routes */
-#define NBR_TABLE_CONF_MAX_NEIGHBORS     5
-#define UIP_CONF_MAX_ROUTES   10
-#endif /* TEST_MORE_ROUTES */
+#define NBR_TABLE_CONF_MAX_NEIGHBORS 15
+#define UIP_CONF_MAX_ROUTES 20
 
 #undef NETSTACK_CONF_RDC
-#define NETSTACK_CONF_RDC     nullrdc_driver
+#define NETSTACK_CONF_RDC nullrdc_driver
 #undef NULLRDC_CONF_802154_AUTOACK
-#define NULLRDC_CONF_802154_AUTOACK       1
+#define NULLRDC_CONF_802154_AUTOACK 1
 
 /* Define as minutes */
-#define RPL_CONF_DEFAULT_LIFETIME_UNIT   60
+#define RPL_CONF_DEFAULT_LIFETIME_UNIT 60
 
 /* 10 minutes lifetime of routes */
-#define RPL_CONF_DEFAULT_LIFETIME        10
+#define RPL_CONF_DEFAULT_LIFETIME 10
 
 #define RPL_CONF_DEFAULT_ROUTE_INFINITE_LIFETIME 1
 
